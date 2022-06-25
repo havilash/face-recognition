@@ -1,12 +1,15 @@
+import sys
+sys.path.append('')
+
+from constants import *
+
 import os
 import time
 import uuid
 import cv2
 
-# import tensorflow as tf
 import json
 import numpy as np
-# from matplotlib import pyplot as plt
 
 from PIL import Image
 import albumentations as alb
@@ -19,10 +22,6 @@ import albumentations as alb
 # tf.config.list_physical_devices('GPU')
 
 
-IMAGES_PATH = os.path.join('data','images')
-IMAGE_SIZE = (120, 120)
-
-
 def create_images(n):
     number_images = n
 
@@ -30,20 +29,19 @@ def create_images(n):
     for imgnum in range(number_images):
         print('Collecting image {}'.format(imgnum))
         ret, frame = cap.read()
-        frame = cv2.resize(frame, (120, 120))
-        imgname = os.path.join(IMAGES_PATH,f'{str(uuid.uuid1())}.jpg')
+        imgname = os.path.join(DATA_PATH, 'images', f'{str(uuid.uuid1())}.jpg')
         cv2.imwrite(imgname, frame)
         cv2.imshow('frame', frame)
-        time.sleep(1)
+        time.sleep(0.5)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     cap.release()
     cv2.destroyAllWindows()
 
-    # labelme
+    # create labels with labelme
 
-def create_augmented_images():
+def create_augmented_data(n):
     augmentor = alb.Compose([alb.RandomCrop(width=450, height=450), 
                             alb.HorizontalFlip(p=0.5), 
                             alb.RandomBrightnessContrast(p=0.2),
@@ -54,11 +52,11 @@ def create_augmented_images():
                                 format='albumentations', 
                                 label_fields=['class_labels']))
 
-    for image in os.listdir(os.path.join('data', 'images')):
-        img = cv2.imread(os.path.join('data', 'images', image))
+    for image in os.listdir(os.path.join(DATA_PATH, 'images')):
+        img = cv2.imread(os.path.join(DATA_PATH, 'images', image))
 
         coords = [0,0,0.00001,0.00001]
-        label_path = os.path.join('data', 'labels', f'{image.split(".")[0]}.json')
+        label_path = os.path.join(DATA_PATH, 'labels', f'{image.split(".")[0]}.json')
         if os.path.exists(label_path):
             with open(label_path, 'r') as f:
                 label = json.load(f)
@@ -67,13 +65,14 @@ def create_augmented_images():
             coords[1] = label['shapes'][0]['points'][0][1]
             coords[2] = label['shapes'][0]['points'][1][0]
             coords[3] = label['shapes'][0]['points'][1][1]
+
             img_shape = img.shape
-            coords = list(np.divide(coords, [*img_shape, *img_shape]))
+            coords = list(np.divide(coords, [img_shape[1], img_shape[0], img_shape[1], img_shape[0]]))
 
         try: 
-            for x in range(60):
+            for x in range(n):
                 augmented = augmentor(image=img, bboxes=[coords], class_labels=['face'])
-                cv2.imwrite(os.path.join('aug_data', 'images', f'{image.split(".")[0]}.{x}.jpg'), augmented['image'])
+                cv2.imwrite(os.path.join(AUG_DATA_PATH, 'images', f'{image.split(".")[0]}.{x}.jpg'), cv2.resize(augmented['image'], IMAGE_SIZE))
 
                 annotation = {}
                 annotation['image'] = image
@@ -90,12 +89,22 @@ def create_augmented_images():
                     annotation['class'] = 0 
 
 
-                with open(os.path.join('aug_data', 'labels', f'{image.split(".")[0]}.{x}.json'), 'w') as f:
+                with open(os.path.join(AUG_DATA_PATH, 'labels', f'{image.split(".")[0]}.{x}.json'), 'w') as f:
                     json.dump(annotation, f)
 
         except Exception as e:
             print(e)
 
 
+def remove_data(path):
+    for f in ['images', 'labels']:
+        p = os.path.join(path, f)
+        for file in os.listdir(p):
+            os.remove(os.path.join(p, file))
+            print(f"removing {os.path.join(p, file)} ...")
+    print("removing completed")
+
 if __name__ == "__main__":
-    create_images(1)
+    # create_images(30)
+    create_augmented_data(60)
+    # remove_data(AUG_DATA_PATH)
