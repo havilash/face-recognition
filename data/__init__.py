@@ -8,6 +8,7 @@ import time
 import uuid
 import cv2
 
+import tensorflow as tf
 import json
 import numpy as np
 
@@ -103,6 +104,29 @@ def remove_data(path):
             os.remove(os.path.join(p, file))
             print(f"removing {os.path.join(p, file)} ...")
     print("removing completed")
+
+
+def load_data():
+    def load_image(x): 
+        byte_img = tf.io.read_file(x)
+        img = tf.io.decode_jpeg(byte_img)
+        return img
+
+    images = list(map(lambda x: os.path.join(AUG_DATA_PATH, 'images', x), os.listdir(os.path.join(AUG_DATA_PATH, 'images'))))
+    images = list(map(load_image, images))
+    images = list(map(lambda x: x/255, images))
+
+
+    def load_labels(label_path):
+        with open(label_path.numpy(), 'r', encoding = "utf-8") as f:
+            label = json.load(f)
+            
+        return [label['class']], label['bbox']
+
+    labels = list(map(lambda x: os.path.join(AUG_DATA_PATH, 'labels', x), os.listdir(os.path.join(AUG_DATA_PATH, 'labels'))))
+    labels = list(map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]), labels))
+
+    return (images, labels)
 
 if __name__ == "__main__":
     # create_images(30)
