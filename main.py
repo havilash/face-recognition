@@ -1,4 +1,5 @@
 from random import triangular
+import time
 from constants import *
 import data
 
@@ -23,20 +24,41 @@ for gpu in gpus:
 tf.config.list_physical_devices('GPU')
 
 
-images, labels = data.load_data()
+"""train_images, train_labels, test_images, test_labels, val_images, val_labels = data.load_data()
 
-train_images, test_images, train_labels, test_labels = train_test_split(images, labels, train_size=0.7, shuffle=False)
-test_images, val_images, test_labels, val_labels = train_test_split(test_images, test_labels, test_size=0.5, shuffle=False)
+train = tf.data.Dataset.zip((train_images, train_labels))
+train = train.shuffle(5000)
+train = train.batch(8)
+train = train.prefetch(4)
+
+test = tf.data.Dataset.zip((test_images, test_labels))
+test = test.shuffle(1000)
+test = test.batch(8)
+test = test.prefetch(4)
+
+val = tf.data.Dataset.zip((val_images, val_labels))
+val = val.shuffle(1000)
+val = val.batch(8)
+val = val.prefetch(4)
 
 
 
+data_samples = train.as_numpy_iterator()
+res = data_samples.next()
 
-train = (train_images, train_labels)
-test = (test_images, test_labels)
-val = (val_images, val_labels)
+fig, ax = plt.subplots(ncols=4, figsize=(20,20))
+for idx in range(4): 
+    sample_image = res[0][idx]
+    sample_coords = res[1][1][idx]
+    
+    cv2.rectangle(sample_image, 
+                  tuple(np.multiply(sample_coords[:2], [120,120]).astype(int)),
+                  tuple(np.multiply(sample_coords[2:], [120,120]).astype(int)), 
+                        (255,0,0), 2)
 
+    ax[idx].imshow(sample_image)"""
 
-
+"""
 vgg = VGG16(include_top=False)
 vgg.summary()
 
@@ -136,6 +158,64 @@ hist = model.fit((train), epochs=10, validation_data=val, callbacks=[tensorboard
 
 hist.history
 
-facetracker.save('facetracker.h5')
+facetracker.save('facetracker.h5')"""
 
 facetracker = load_model('facetracker.h5')
+
+"""test_data = test.as_numpy_iterator()
+test_sample = test_data.next()
+yhat = facetracker.predict(test_sample[0])
+fig, ax = plt.subplots(ncols=4, figsize=(20,20))
+for idx in range(4): 
+    sample_image = test_sample[0][idx]
+    sample_coords = yhat[1][idx]
+    
+    if yhat[0][idx] > 0.9:
+        cv2.rectangle(sample_image, 
+                      tuple(np.multiply(sample_coords[:2], [120,120]).astype(int)),
+                      tuple(np.multiply(sample_coords[2:], [120,120]).astype(int)), 
+                            (255,0,0), 2)
+    
+    ax[idx].imshow(sample_image)"""
+
+
+cap = cv2.VideoCapture(0)
+while cap.isOpened():
+    _ , frame = cap.read()
+    frame = frame[50:500, 50:500,:]
+    
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    resized = tf.image.resize(rgb, (120,120))
+    
+    yhat = facetracker.predict(np.expand_dims(resized/255,0))
+    sample_coords = yhat[1][0]
+    
+    if yhat[0] > 0.5: 
+        # Controls the main rectangle
+        cv2.rectangle(frame, 
+                      tuple(np.multiply(sample_coords[:2], [450,450]).astype(int)),
+                      tuple(np.multiply(sample_coords[2:], [450,450]).astype(int)), 
+                            (255,0,0), 2)
+        # Controls the label rectangle
+        cv2.rectangle(frame, 
+                      tuple(np.add(np.multiply(sample_coords[:2], [450,450]).astype(int), 
+                                    [0,-30])),
+                      tuple(np.add(np.multiply(sample_coords[:2], [450,450]).astype(int),
+                                    [80,0])), 
+                            (255,0,0), -1)
+        
+        # Controls the text rendered
+        cv2.putText(frame, 'face', tuple(np.add(np.multiply(sample_coords[:2], [450,450]).astype(int),
+                                               [0,-5])),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2, cv2.LINE_AA)
+    
+    cv2.imshow('Facetracker', frame)
+    
+    if cv2.waitKey(1) & 0xFF == ord('q'):  # quit window on press q
+        break
+
+    if cv2.getWindowProperty('Facetracker', cv2.WND_PROP_VISIBLE) < 1:  # quit window on press X
+        break
+
+cap.release()
+cv2.destroyAllWindows()

@@ -3,12 +3,14 @@ sys.path.append('')
 
 from constants import *
 
+import shutil
 import os
 import time
 import uuid
 import cv2
 
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
 import json
 import numpy as np
 
@@ -105,6 +107,28 @@ def remove_data(path):
             print(f"removing {os.path.join(p, file)} ...")
     print("removing completed")
 
+def create_train_test_data():
+    images = list(map(lambda x: os.path.join(AUG_DATA_PATH, 'images', x), os.listdir(os.path.join(AUG_DATA_PATH, 'images'))))
+    labels = list(map(lambda x: os.path.join(AUG_DATA_PATH, 'labels', x), os.listdir(os.path.join(AUG_DATA_PATH, 'labels'))))
+
+    train_images, test_images, train_labels, test_labels = train_test_split(images, labels, train_size=0.7, shuffle=False)
+    test_images, val_images, test_labels, val_labels = train_test_split(test_images, test_labels, test_size=0.5, shuffle=False)
+    
+    for f in train_images:
+        shutil.copy(f, os.path.join(AUG_DATA_PATH, 'train', 'images'))
+    for f in train_labels:
+        shutil.copy(f, os.path.join(AUG_DATA_PATH, 'train', 'labels'))
+
+    for f in test_images:
+        shutil.copy(f, os.path.join(AUG_DATA_PATH, 'test', 'images'))
+    for f in test_labels:
+        shutil.copy(f, os.path.join(AUG_DATA_PATH, 'test', 'labels'))
+    
+    for f in val_images:
+        shutil.copy(f, os.path.join(AUG_DATA_PATH, 'val', 'images'))
+    for f in val_labels:
+        shutil.copy(f, os.path.join(AUG_DATA_PATH, 'val', 'labels'))
+        
 
 def load_data():
     def load_image(x): 
@@ -112,9 +136,20 @@ def load_data():
         img = tf.io.decode_jpeg(byte_img)
         return img
 
-    images = list(map(lambda x: os.path.join(AUG_DATA_PATH, 'images', x), os.listdir(os.path.join(AUG_DATA_PATH, 'images'))))
-    images = list(map(load_image, images))
-    images = list(map(lambda x: x/255, images))
+    train_images = tf.data.Dataset.list_files(os.path.join(AUG_DATA_PATH, 'train', 'images', '*.jpg'), shuffle=False)
+    train_images = train_images.map(load_image)
+    train_images = train_images.map(lambda x: tf.image.resize(x, (120,120)))
+    train_images = train_images.map(lambda x: x/255)
+
+    test_images = tf.data.Dataset.list_files(os.path.join(AUG_DATA_PATH, 'test', 'images', '*.jpg'), shuffle=False)
+    test_images = test_images.map(load_image)
+    test_images = test_images.map(lambda x: tf.image.resize(x, (120,120)))
+    test_images = test_images.map(lambda x: x/255)
+
+    val_images = tf.data.Dataset.list_files(os.path.join(AUG_DATA_PATH, 'val', 'images', '*.jpg'), shuffle=False)
+    val_images = val_images.map(load_image)
+    val_images = val_images.map(lambda x: tf.image.resize(x, (120,120)))
+    val_images = val_images.map(lambda x: x/255)
 
 
     def load_labels(label_path):
@@ -123,12 +158,24 @@ def load_data():
             
         return [label['class']], label['bbox']
 
-    labels = list(map(lambda x: os.path.join(AUG_DATA_PATH, 'labels', x), os.listdir(os.path.join(AUG_DATA_PATH, 'labels'))))
-    labels = list(map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]), labels))
+    
+    train_labels = tf.data.Dataset.list_files(os.path.join(AUG_DATA_PATH, 'train', 'labels', '*.json'), shuffle=False)
+    train_labels = train_labels.map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]))
 
-    return (images, labels)
+    test_labels = tf.data.Dataset.list_files(os.path.join(AUG_DATA_PATH, 'test', 'labels', '*.json'), shuffle=False)
+    test_labels = test_labels.map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]))
+
+    val_labels = tf.data.Dataset.list_files(os.path.join(AUG_DATA_PATH, 'val', 'labels', '*.json'), shuffle=False)
+    val_labels = val_labels.map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]))
+
+    train_labels.as_numpy_iterator().next()
+
+    return (train_images, train_labels, test_images, test_labels, val_images, val_labels)
 
 if __name__ == "__main__":
     # create_images(30)
-    create_augmented_data(60)
+    # create_augmented_data(60)
     # remove_data(AUG_DATA_PATH)
+
+    # create_train_test_data()
+    pass
