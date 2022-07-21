@@ -1,4 +1,3 @@
-from random import triangular
 import time
 from constants import *
 import data
